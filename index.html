@@ -154,7 +154,7 @@ body.pres .root b{font-family:"Spline Sans Mono",ui-monospace,monospace}
     <div id="msg" role="status" aria-live="polite"></div>
     <div class="plot"><svg id="plot" viewBox="0 0 800 450" role="img" aria-label="Gráfica de la función con el intervalo actual"></svg></div>
     <label class="zoom"><input type="checkbox" id="zoom">Seguir el intervalo con la lupa</label>
-    <div class="leg"><span><i style="background:var(--grn)"></i>extremo a</span><span><i style="background:var(--red)"></i>extremo b</span><span><i style="background:var(--blue)"></i>punto medio c</span></div>
+    <div class="leg"><span><i style="background:var(--grn)"></i><span id="leg-a">extremo a</span></span><span><i style="background:var(--red)"></i><span id="leg-b">extremo b</span></span><span><i style="background:var(--blue)"></i>punto medio c</span></div>
     <div class="ctl">
       <button class="rb" id="prev" aria-label="Paso anterior" title="Paso anterior">‹</button>
       <button class="rb p" id="play" aria-label="Reproducir" title="Reproducir / pausar">▶</button>
@@ -191,8 +191,7 @@ body.pres .root b{font-family:"Spline Sans Mono",ui-monospace,monospace}
     <li>Si <span class="f">f(a)·f(c) &lt; 0</span>, la raíz está en <span class="f">[a, c]</span> y se hace <span class="f">b = c</span>; si no, está en <span class="f">[c, b]</span> y se hace <span class="f">a = c</span>.</li>
     <li>Desde la segunda iteración, calcular <span class="f">|c nuevo − c anterior| / |c nuevo| × 100</span>. Si el punto medio actual es cero, el porcentaje queda sin definir. Detenerse cuando el porcentaje sea menor o igual que la tolerancia.</li>
   </ol>
-  <h3>Cota absoluta y error porcentual</h3>
-  <p>La cota absoluta <span class="f">E = (b − a)/2</span> se obtiene del intervalo de cada paso. El error porcentual compara dos puntos medios sucesivos, por eso la primera fila muestra un guion en esa columna.</p>
+  <p>El error porcentual compara dos puntos medios sucesivos, por eso la primera fila muestra un guion en esa columna.</p>
   <div class="cols">
     <div><h3>Ventajas</h3><ul><li>Siempre converge si hay cambio de signo.</li><li>Muy simple de programar.</li><li>Se sabe de antemano cuántos pasos hacen falta.</li></ul></div>
     <div><h3>Limitaciones</h3><ul><li>Convergencia lenta (lineal): gana 1 bit de precisión por paso.</li><li>Necesita un intervalo con cambio de signo.</li><li>No detecta raíces donde <span class="f">f</span> toca el eje sin cruzarlo (ej. x²).</li><li>Una asíntota (ej. 1/x) puede parecer una raíz: hay que revisar f(c).</li></ul></div>
@@ -202,7 +201,7 @@ body.pres .root b{font-family:"Spline Sans Mono",ui-monospace,monospace}
 </details>
 
 <button class="csv" id="csv" type="button">Descargar tabla (CSV)</button>
-<div class="tw"><table><thead><tr><th>n</th><th>a</th><th>b</th><th>c</th><th>f(c)</th><th>E = (b − a)/2</th><th>% error</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="tw"><table><thead><tr><th>n</th><th>a</th><th>b</th><th>f(a)</th><th>f(b)</th><th>c</th><th>f(c)</th><th>% error</th></tr></thead><tbody id="tb"></tbody></table></div>
 </main>
 
 <script>
@@ -248,17 +247,17 @@ function run(){
   let fa=f(A0),fb=f(B0);const fa0=fa,fb0=fb;
   if(!isFinite(fa)||!isFinite(fb))return fail('La función no está definida en a o en b. Prueba otro intervalo.');
   steps=[];
-  if(fa===0||fb===0){steps.push({n:1,a:A0,b:B0,c:fa===0?A0:B0,fc:0,err:0,pct:null,d:'x',endpoint:true})}
+  if(fa===0||fb===0){steps.push({n:1,a:A0,b:B0,fa,fb,c:fa===0?A0:B0,fc:0,pct:null,d:'x',endpoint:true})}
   else{
     if(Math.sign(fa)*Math.sign(fb)>0)return fail('f(a) = '+fmt(fa)+' y f(b) = '+fmt(fb)+' tienen el mismo signo. Sin cambio de signo, el teorema de Bolzano no garantiza una raíz: elige otro intervalo.');
     let a=A0,b=B0;
     for(let n=1;n<=100;n++){
-      const c=(a+b)/2,fc=f(c),err=(b-a)/2;
+      const c=(a+b)/2,fc=f(c);
       if(!isFinite(fc)){if(!steps.length)return fail('La función no está definida en el punto medio '+fmt(c)+'. Prueba otro intervalo.');NOTE='La función dejó de estar definida cerca de '+fmt(c)+'.';break}
       const d=fc===0?'x':Math.sign(fa)*Math.sign(fc)<0?'l':'r';
       const previous=steps[steps.length-1];
       const pct=previous&&c!==0?Math.abs((c-previous.c)/c)*100:null;
-      steps.push({n,a,b,c,fc,err,pct,d});
+      steps.push({n,a,b,fa,fb,c,fc,pct,d});
       if(d==='x')break;
       if(!(c>a&&c<b)){NOTE='Se llegó al límite de precisión del computador antes de la tolerancia pedida.';break}
       if(pct!==null&&pct<=TOL)break;
@@ -307,7 +306,7 @@ function draw(){
   let g=`<defs><clipPath id="cp"><rect x="${L}" y="${T}" width="${W-L-R}" height="${H-T-Bt}"/></clipPath></defs>`;
   ty.o.forEach(v=>{g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${L-8}" y="${Y(v)+5}" text-anchor="end" font-size="15" fill="var(--mute)" class="mono">${lab(v,ty.d)}</text>`});
   tx.o.forEach(v=>{g+=`<line y1="${T}" y2="${H-Bt}" x1="${X(v)}" x2="${X(v)}" stroke="var(--grid)"/><text x="${X(v)}" y="${H-Bt+24}" text-anchor="middle" font-size="15" fill="var(--mute)" class="mono">${lab(v,tx.d)}</text>`});
-  const aa=s.a,bb=s.b,fa=f(aa),fb=f(bb),fcv=isFinite(s.fc)?s.fc:0;
+  const {a:aa,b:bb,fa,fb,fc:fcv}=s;
   g+=`<g clip-path="url(#cp)"><rect x="${X(aa)}" y="${T}" width="${Math.max(2,X(bb)-X(aa))}" height="${H-T-Bt}" fill="var(--hl)"/>`;
   g+=hl(L,yz,W-R,yz,'--ink',2.2);
   let d='',pen=false;
@@ -322,8 +321,8 @@ function draw(){
   const tt=(x,y,t,c,z=18)=>`<text class="h" x="${cl(x,L+Math.max(40,String(t).length*z*.3),W-R-Math.max(40,String(t).length*z*.3))}" y="${y}" text-anchor="middle" font-size="${z}" font-weight="700" fill="var(${c})">${t}</text>`;
   g+=tt(X(aa),T+28,'a','--grn',30)+tt(X(bb),T+28,'b','--red',30);
   const ya=isFinite(fa)?cl(Y(fa)+(fa<0?36:-18),T+48,H-Bt-8):null,yb=isFinite(fb)?cl(Y(fb)+(fb<0?36:-18),T+48,H-Bt-8):null;
-  if(ya!==null)g+=tt(X(aa),ya,'f(a) '+(fa<0?'< 0':'> 0'),'--grn',21);
-  if(yb!==null)g+=tt(X(bb),yb,'f(b) '+(fb<0?'< 0':'> 0'),'--red',21);
+  if(ya!==null)g+=tt(X(aa),ya,'f(a) '+(fa===0?'= 0':fa<0?'&lt; 0':'&gt; 0'),'--grn',21);
+  if(yb!==null)g+=tt(X(bb),yb,'f(b) '+(fb===0?'= 0':fb<0?'&lt; 0':'&gt; 0'),'--red',21);
   /* la etiqueta de c busca un lugar libre para no pisar f(a) ni f(b) */
   const free=y=>[[aa,ya],[bb,yb]].every(([e,yy])=>yy===null||Math.abs(X(e)-X(s.c))>150||Math.abs(yy-y)>30);
   const cand=[Y(fcv)+(fcv<0?-22:36),Y(fcv)+(fcv<0?36:-22),Y(fcv)-64,Y(fcv)+72,T+110].map(v=>cl(v,T+68,H-Bt-8));
@@ -350,12 +349,14 @@ function strip(){
 }
 function render(){
   const has=steps.length>0,s=steps[cur];
+  $('#leg-a').textContent=has?`a = ${fmt(s.a)} · f(a) = ${fmt(s.fa)}`:'extremo a';
+  $('#leg-b').textContent=has?`b = ${fmt(s.b)} · f(b) = ${fmt(s.fb)}`:'extremo b';
   $('#sl').max=Math.max(0,steps.length-1);$('#sl').value=cur;$('#sl').disabled=!has;
   ['#prev','#next','#play'].forEach(q=>$(q).disabled=!has);
   $('#lab').textContent=has?`paso ${s.n} de ${steps.length}`:'—';
   const tb=$('#tb');
   if(!has){tb.innerHTML='';$('#rv').textContent='—';$('#rc').textContent='aproximación de la raíz';$('#st').textContent='';$('#say').textContent=$('#msg').textContent?'Corrige los datos y vuelve a calcular.':'Pulsa “Calcular raíz” para empezar.';strip();draw();return}
-  tb.innerHTML=steps.map((q,i)=>`<tr data-i="${i}" class="${i===cur?'on':i>cur?'off':''}"><td>${q.n}</td><td>${fmt(q.a)}</td><td>${fmt(q.b)}</td><td>${fmt(q.c)}</td><td>${fmt(q.fc)}</td><td>${fmt(q.err)}</td><td>${fmtPct(q.pct)}</td></tr>`).join('');
+  tb.innerHTML=steps.map((q,i)=>`<tr data-i="${i}" class="${i===cur?'on':i>cur?'off':''}"><td>${q.n}</td><td>${fmt(q.a)}</td><td>${fmt(q.b)}</td><td>${fmt(q.fa)}</td><td>${fmt(q.fb)}</td><td>${fmt(q.c)}</td><td>${fmt(q.fc)}</td><td>${fmtPct(q.pct)}</td></tr>`).join('');
   const row=tb.children[cur],w=$('.tw');w.scrollTop=Math.max(0,row.offsetTop-w.clientHeight/2);
   const last=cur===steps.length-1;
   $('#rv').textContent=fmt(s.c);
@@ -363,7 +364,7 @@ function render(){
   const dec=s.d==='x'?'f(c) vale 0: encontramos la raíz exacta.':s.d==='l'?'f(a) y f(c) tienen signo opuesto, así que la raíz queda en <u>[a, c]</u>. Descartamos la mitad derecha.':'f(a) y f(c) tienen el mismo signo, así que la raíz queda en <u>[c, b]</u>. Descartamos la mitad izquierda.';
   $('#say').innerHTML=s.endpoint?`El extremo ${fmt(s.c)} es una raíz exacta.`:`El punto medio de <u>[${fmt(s.a)}, ${fmt(s.b)}]</u> es c = ${fmt(s.c)} y f(c) = ${fmt(s.fc)}. ${dec}`;
   const finalStatus=NOTE||(s.d==='x'?'Raíz exacta.':s.pct!==null&&s.pct<=TOL?'Se alcanzó la tolerancia.':'Se alcanzó el máximo de iteraciones.');
-  $('#st').textContent=`Cota absoluta E = ${fmt(s.err)}. Error relativo aproximado: ${fmtPct(s.pct)}. Tolerancia: ${TOL} %.`+(last?' '+finalStatus:'');
+  $('#st').textContent=`Error relativo aproximado: ${fmtPct(s.pct)}. Tolerancia: ${TOL} %.`+(last?' '+finalStatus:'');
   strip();setView();
 }
 const go=i=>{cur=Math.min(steps.length-1,Math.max(0,i));render()};
@@ -386,7 +387,7 @@ document.querySelectorAll('.id dd').forEach(d=>{
 });
 $('#csv').onclick=()=>{
   if(!steps.length)return;
-  const rows=['n;a;b;c;f(c);E;% error'].concat(steps.map(q=>[q.n,q.a,q.b,q.c,q.fc,q.err,q.pct].join(';')));
+  const rows=['n;a;b;f(a);f(b);c;f(c);% error'].concat(steps.map(q=>[q.n,q.a,q.b,q.fa,q.fb,q.c,q.fc,q.pct].join(';')));
   const u=URL.createObjectURL(new Blob(['\ufeff'+rows.join('\n')],{type:'text/csv;charset=utf-8'}));
   const l=document.createElement('a');l.href=u;l.download='biseccion.csv';document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),500);
 };
